@@ -23,10 +23,10 @@ logger = logging.getLogger(__name__)
 
 def check_git_status():
     repo = git.Repo(search_parent_directories=True)
-    # if repo.is_dirty():
-    # raise Exception(
-    #     "Uncommitted changes in the repository. Commit or stash changes before running the experiment."
-    # )
+    if repo.is_dirty():
+        raise Exception(
+            "Uncommitted changes in the repository. Commit or stash changes before running the experiment."
+        )
     return repo.head.commit.hexsha
 
 
