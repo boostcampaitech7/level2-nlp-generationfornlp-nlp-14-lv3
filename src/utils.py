@@ -203,7 +203,7 @@ def get_processed_dataset(dataset):
             {
                 "id": row["id"],
                 "messages": messages,
-                "label": row.get("answer", None),
+                "labels": row.get("answer", None),
                 "len_choices": len_choices,
             }
         )
