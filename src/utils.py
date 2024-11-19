@@ -23,10 +23,10 @@ logger = logging.getLogger(__name__)
 
 def check_git_status():
     repo = git.Repo(search_parent_directories=True)
-    # if repo.is_dirty():
-    # raise Exception(
-    #     "Uncommitted changes in the repository. Commit or stash changes before running the experiment."
-    # )
+    if repo.is_dirty():
+        raise Exception(
+            "Uncommitted changes in the repository. Commit or stash changes before running the experiment."
+        )
     return repo.head.commit.hexsha
 
 
@@ -203,7 +203,7 @@ def get_processed_dataset(dataset):
             {
                 "id": row["id"],
                 "messages": messages,
-                "label": row.get("answer", None),
+                "labels": row.get("answer", None),
                 "len_choices": len_choices,
             }
         )
@@ -234,25 +234,6 @@ def check_no_error(
     max_seq_length = min(max_seq_length, tokenizer.model_max_length)
 
     return max_seq_length
-
-
-def get_latest_checkpoint(checkpoint_dir):
-    # List all directories in the checkpoint folder
-    checkpoint_dirs = [
-        d
-        for d in os.listdir(checkpoint_dir)
-        if os.path.isdir(os.path.join(checkpoint_dir, d))
-    ]
-
-    # Filter directories by a specific naming convention, e.g., "checkpoint-{step_number}"
-    checkpoint_dirs = [d for d in checkpoint_dirs if d.startswith("checkpoint-")]
-
-    # Extract step numbers and find the highest one
-    latest_checkpoint = max(
-        checkpoint_dirs,
-        key=lambda x: int(x.split("-")[-1]),  # Assumes "checkpoint-{step_number}"
-    )
-    return os.path.join(checkpoint_dir, latest_checkpoint)
 
 
 PROMPT_NO_QUESTION_PLUS = """지문:
