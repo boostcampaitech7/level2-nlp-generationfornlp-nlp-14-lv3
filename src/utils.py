@@ -236,25 +236,6 @@ def check_no_error(
     return max_seq_length
 
 
-def get_latest_checkpoint(checkpoint_dir):
-    # List all directories in the checkpoint folder
-    checkpoint_dirs = [
-        d
-        for d in os.listdir(checkpoint_dir)
-        if os.path.isdir(os.path.join(checkpoint_dir, d))
-    ]
-
-    # Filter directories by a specific naming convention, e.g., "checkpoint-{step_number}"
-    checkpoint_dirs = [d for d in checkpoint_dirs if d.startswith("checkpoint-")]
-
-    # Extract step numbers and find the highest one
-    latest_checkpoint = max(
-        checkpoint_dirs,
-        key=lambda x: int(x.split("-")[-1]),  # Assumes "checkpoint-{step_number}"
-    )
-    return os.path.join(checkpoint_dir, latest_checkpoint)
-
-
 PROMPT_NO_QUESTION_PLUS = """지문:
 {paragraph}
 

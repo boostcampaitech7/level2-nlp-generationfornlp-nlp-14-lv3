@@ -9,6 +9,7 @@ import wandb
 from peft import AutoPeftModelForCausalLM, LoraConfig
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.trainer_utils import get_last_checkpoint
 from trl import DataCollatorForCompletionOnlyLM, SFTTrainer
 
 from customTrainer import CustomTrainer
@@ -18,7 +19,6 @@ from utils import (
     create_experiment_dir,
     get_arguments,
     get_flatten_dataset,
-    get_latest_checkpoint,
     get_processed_dataset,
     save_args,
     set_seed,
@@ -209,24 +209,31 @@ if sft_args.do_train:
 
     trainer.state.save_to_json(os.path.join(sft_args.output_dir, "trainer_state.json"))
 
-    if sft_args.do_eval:
-        infer_results, metrics = trainer.evaluate()
-        trainer.log_metrics("eval", metrics)
-        trainer.save_metrics("eval", metrics)
-        predictions_df = pd.DataFrame(infer_results)
-        predictions_df.to_csv(
-            os.path.join(sft_args.output_dir, "eval_output.csv"), index=False
+if sft_args.do_eval:
+    if not sft_args.do_train:
+        checkpoint_path = get_last_checkpoint(model_args.predict_model_name_or_path)
+        model = AutoPeftModelForCausalLM.from_pretrained(
+            checkpoint_path,
+            trust_remote_code=True,
+            torch_dtype=torch.float16,
+            device_map="auto",
         )
+        tokenizer = AutoTokenizer.from_pretrained(
+            checkpoint_path,
+            trust_remote_code=True,
+        )
+    infer_results, metrics = trainer.evaluate()
+    trainer.log_metrics("eval", metrics)
+    trainer.save_metrics("eval", metrics)
+    predictions_df = pd.DataFrame(infer_results)
+    predictions_df.to_csv(
+        os.path.join(sft_args.output_dir, "eval_output.csv"), index=False
+    )
 
 
 if sft_args.do_predict:
     if not sft_args.do_train:
-        checkpoint_path = (
-            model_args.predict_model_name_or_path
-            if model_args.predict_model_name_or_path
-            else get_latest_checkpoint(sft_args.output_dir)
-        )
-
+        checkpoint_path = get_last_checkpoint(model_args.predict_model_name_or_path)
         model = AutoPeftModelForCausalLM.from_pretrained(
             checkpoint_path,
             trust_remote_code=True,
