@@ -157,9 +157,9 @@ def preprocess_logits_for_metrics(logits, labels):
 
 
 peft_config = LoraConfig(
-    r=6,
-    lora_alpha=8,
-    lora_dropout=0.05,
+    r=model_args.lora_r,
+    lora_alpha=model_args.lora_alpha,
+    lora_dropout=model_args.lora_dropout,
     target_modules=["q_proj", "k_proj"],
     bias="none",
     task_type="CAUSAL_LM",

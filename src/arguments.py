@@ -30,6 +30,18 @@ class ModelArguments:
         default=None,
         metadata={"help": "Path to model for predict like checkpoint-x in experiments"},
     )
+    lora_r: int = field(
+        default=6,
+        metadata={"help": "Lora attention dimension (the 'rank')"},
+    )
+    lora_alpha: int = field(
+        default=8,
+        metadata={"help": "The alpha parameter for Lora scaling."},
+    )
+    lora_dropout: float = field(
+        default=0.05,
+        metadata={"help": "The dropout probability for Lora layers."},
+    )
 
 
 @dataclass
