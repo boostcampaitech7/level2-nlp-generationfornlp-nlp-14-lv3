@@ -106,13 +106,6 @@ eval_tokenized_dataset = eval_processed_dataset.map(
     desc="Tokenizing",
 )
 
-train_tokenized_dataset = train_tokenized_dataset.filter(
-    lambda x: len(x["input_ids"]) <= 1024
-)
-eval_tokenized_dataset = eval_tokenized_dataset.filter(
-    lambda x: len(x["input_ids"]) <= 1024
-)
-
 train_dataset = train_tokenized_dataset
 eval_dataset = eval_tokenized_dataset
 
