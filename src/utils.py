@@ -33,17 +33,17 @@ def check_git_status():
 def create_experiment_dir(base_dir="../experiments"):
     kst = timezone(timedelta(hours=9))
     timestamp = datetime.now(kst).strftime("%Y%m%d_%H%M%S")
-    experiment_dir = os.path.join(base_dir, timestamp)
-    os.makedirs(experiment_dir, exist_ok=True)
-    return experiment_dir
+    output_dir = os.path.join(base_dir, timestamp)
+    os.makedirs(output_dir, exist_ok=True)
+    return output_dir
 
 
-def save_args(args_dict, experiment_dir, commit_id):
-    args_path = os.path.join(experiment_dir, "args.json")
+def save_args(args_dict, output_dir, commit_id):
+    args_path = os.path.join(output_dir, "args.json")
     with open(args_path, "w") as f:
         json.dump(args_dict, f, indent=4)
 
-    with open(os.path.join(experiment_dir, "git_commit.txt"), "w") as f:
+    with open(os.path.join(output_dir, "git_commit.txt"), "w") as f:
         f.write(f"Git Commit ID: {commit_id}\n")
 
 
@@ -55,7 +55,7 @@ def load_args_from_json(json_file):
     return args_dict
 
 
-def get_arguments(experiment_dir):
+def get_arguments(output_dir):
     # Initialize the parser
     parser = HfArgumentParser((ModelArguments, DataTrainingArguments, SFTConfig))
 
@@ -65,9 +65,9 @@ def get_arguments(experiment_dir):
     else:
         json_args = {}
 
-    # Ensure output_dir is set to experiment_dir
-    json_args["output_dir"] = experiment_dir
-    json_args["logging_dir"] = experiment_dir
+    # Ensure output_dir is set from argument
+    json_args["output_dir"] = output_dir
+    json_args["logging_dir"] = output_dir
 
     # Parse command-line arguments
     parser.set_defaults(**json_args)
@@ -77,32 +77,6 @@ def get_arguments(experiment_dir):
     )
 
     return model_args, data_args, sft_args, json_args
-
-
-def get_inference_arguments(experiment_dir):
-    # Initialize the parser
-    parser = HfArgumentParser(
-        (ModelArguments, DataTrainingArguments, TrainingArguments)
-    )
-
-    args_json_path = "../args_inference.json"
-    if os.path.exists(args_json_path):
-        json_args = load_args_from_json(args_json_path)
-    else:
-        json_args = {}
-
-    # Ensure output_dir is set to experiment_dir
-    json_args["output_dir"] = experiment_dir
-    json_args["data_path"] = json_args["model_name_or_path"]
-
-    # Parse command-line arguments
-    parser.set_defaults(**json_args)
-    combined_args = get_combined_args(json_args)
-    model_args, data_args, training_args = parser.parse_args_into_dataclasses(
-        args=combined_args
-    )
-
-    return model_args, data_args, training_args, json_args
 
 
 def get_combined_args(json_args):
