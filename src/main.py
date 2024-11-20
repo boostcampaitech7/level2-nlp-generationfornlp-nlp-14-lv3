@@ -12,8 +12,8 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.trainer_utils import get_last_checkpoint
 from trl import DataCollatorForCompletionOnlyLM, SFTTrainer
 
-from customTrainer import CustomTrainer
-from utils import (
+from src.customTrainer import CustomTrainer
+from src.utils import (
     check_git_status,
     check_no_error,
     create_experiment_dir,
@@ -106,13 +106,6 @@ eval_tokenized_dataset = eval_processed_dataset.map(
     desc="Tokenizing",
 )
 
-train_tokenized_dataset = train_tokenized_dataset.filter(
-    lambda x: len(x["input_ids"]) <= 1024
-)
-eval_tokenized_dataset = eval_tokenized_dataset.filter(
-    lambda x: len(x["input_ids"]) <= 1024
-)
-
 train_dataset = train_tokenized_dataset
 eval_dataset = eval_tokenized_dataset
 
@@ -157,9 +150,9 @@ def preprocess_logits_for_metrics(logits, labels):
 
 
 peft_config = LoraConfig(
-    r=6,
-    lora_alpha=8,
-    lora_dropout=0.05,
+    r=model_args.lora_r,
+    lora_alpha=model_args.lora_alpha,
+    lora_dropout=model_args.lora_dropout,
     target_modules=["q_proj", "k_proj"],
     bias="none",
     task_type="CAUSAL_LM",
