@@ -16,7 +16,8 @@ from transformers import HfArgumentParser, PreTrainedTokenizerFast, TrainingArgu
 from transformers.trainer_utils import get_last_checkpoint
 from trl import SFTConfig
 
-from arguments import DataTrainingArguments, ModelArguments
+from src._path import *
+from src.arguments import DataTrainingArguments, ModelArguments
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +60,7 @@ def get_arguments(output_dir):
     # Initialize the parser
     parser = HfArgumentParser((ModelArguments, DataTrainingArguments, SFTConfig))
 
-    args_json_path = "../args.json"
+    args_json_path = os.path.join(ROOT, "../args.json")
     if os.path.exists(args_json_path):
         json_args = load_args_from_json(args_json_path)
     else:
