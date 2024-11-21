@@ -16,8 +16,8 @@ from transformers import HfArgumentParser, PreTrainedTokenizerFast, TrainingArgu
 from transformers.trainer_utils import get_last_checkpoint
 from trl import SFTConfig
 
-from _path import *
-from arguments import DataTrainingArguments, ModelArguments
+from src._path import *
+from src.arguments import DataTrainingArguments, ModelArguments
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ def check_git_status():
     return repo.head.commit.hexsha
 
 
-def create_experiment_dir(base_dir="../experiments"):
+def create_experiment_dir(base_dir=EXP_PATH):
     kst = timezone(timedelta(hours=9))
     timestamp = datetime.now(kst).strftime("%Y%m%d_%H%M%S")
     output_dir = os.path.join(base_dir, timestamp)
