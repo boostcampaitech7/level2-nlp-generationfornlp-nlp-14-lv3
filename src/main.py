@@ -12,8 +12,8 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.trainer_utils import get_last_checkpoint
 from trl import DataCollatorForCompletionOnlyLM, SFTTrainer
 
-from src.customTrainer import CustomTrainer
-from src.utils import (
+from customTrainer import CustomTrainer
+from utils import (
     check_git_status,
     check_no_error,
     create_experiment_dir,

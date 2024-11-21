@@ -16,8 +16,8 @@ from transformers import HfArgumentParser, PreTrainedTokenizerFast, TrainingArgu
 from transformers.trainer_utils import get_last_checkpoint
 from trl import SFTConfig
 
-from src._path import *
-from src.arguments import DataTrainingArguments, ModelArguments
+from _path import *
+from arguments import DataTrainingArguments, ModelArguments
 
 logger = logging.getLogger(__name__)
 
