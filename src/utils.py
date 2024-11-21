@@ -3,7 +3,9 @@ import logging
 import os
 import random
 import sys
+import time
 from ast import literal_eval
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional, Tuple
 
@@ -209,6 +211,13 @@ def check_no_error(
     max_seq_length = min(max_seq_length, tokenizer.model_max_length)
 
     return max_seq_length
+
+
+@contextmanager
+def timer(name):
+    t0 = time.time()
+    yield
+    print(f"[{name}] done in {time.time() - t0:.3f} s")
 
 
 PROMPT_NO_QUESTION_PLUS = """지문:
