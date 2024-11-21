@@ -60,7 +60,7 @@ def get_arguments(output_dir):
     # Initialize the parser
     parser = HfArgumentParser((ModelArguments, DataTrainingArguments, SFTConfig))
 
-    args_json_path = os.path.join(ROOT, "../args.json")
+    args_json_path = os.path.join(ROOT, "args.json")
     if os.path.exists(args_json_path):
         json_args = load_args_from_json(args_json_path)
     else:
