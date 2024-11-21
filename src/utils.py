@@ -31,7 +31,7 @@ def check_git_status():
     return repo.head.commit.hexsha
 
 
-def create_experiment_dir(base_dir="../experiments"):
+def create_experiment_dir(base_dir=EXP_PATH):
     kst = timezone(timedelta(hours=9))
     timestamp = datetime.now(kst).strftime("%Y%m%d_%H%M%S")
     output_dir = os.path.join(base_dir, timestamp)
@@ -60,7 +60,7 @@ def get_arguments(output_dir):
     # Initialize the parser
     parser = HfArgumentParser((ModelArguments, DataTrainingArguments, SFTConfig))
 
-    args_json_path = os.path.join(ROOT, "../args.json")
+    args_json_path = os.path.join(ROOT, "args.json")
     if os.path.exists(args_json_path):
         json_args = load_args_from_json(args_json_path)
     else:
