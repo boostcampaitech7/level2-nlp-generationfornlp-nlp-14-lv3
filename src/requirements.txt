@@ -10,3 +10,4 @@ peft
 wandb
 gitpython
 pre-commit
+konlpy

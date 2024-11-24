@@ -5,7 +5,7 @@ from typing import List, NoReturn, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
-from datasets import Dataset
+from datasets import Dataset, load_dataset
 from scipy.sparse import load_npz, save_npz, vstack
 from scipy.spatial.distance import cdist
 from tqdm.auto import tqdm
@@ -24,7 +24,7 @@ class SparseRetrieval:
         self,
         tokenize_fn=None,
         data_path: Optional[str] = "../data/",
-        context_path: Optional[str] = "wikipedia_documents.json",
+        context_path: Optional[str] = "",
         mode: Optional[str] = "bm25",
         max_feature: int = 1000000,
         ngram_range: tuple = (1, 2),
@@ -100,17 +100,42 @@ class SparseRetrieval:
         cleaned_text = re.sub(r"\s+", " ", cleaned_text)
         return cleaned_text.strip()
 
-    def _initialize_from_wiki(self, context_path: str):
-        with open(
-            os.path.join(self.data_path, context_path), "r", encoding="utf-8"
-        ) as f:
-            wiki = json.load(f)
+    def _initialize_from_wiki(self, context_path: Union[str, List]):
+        if not context_path:
+            raise ValueError("The `context_path` must be provided.")
+        try:
+            # 원본 텍스트와 정제된 텍스트의 매핑 사전 생성
+            if isinstance(context_path, str) and os.path.isfile(context_path):
+                print(f"Attempting to load as JSON file: {context_path}")
+                with open(context_path, "r", encoding="utf-8") as f:
+                    wiki = json.load(f)
 
-        self.original_docs = list(dict.fromkeys([v["text"] for v in wiki.values()]))
-        self.cleaned_docs = [self.clean_text(doc) for doc in self.original_docs]
-        # 원본 텍스트와 정제된 텍스트의 매핑 사전 생성
-        print(f"Lengths of unique contexts : {len(self.original_docs)}")
-        # self.ids = list(range(len(self.docs)))
+                self.original_docs = list(
+                    dict.fromkeys([v["text"] for v in wiki.values()])
+                )
+                self.cleaned_docs = [self.clean_text(doc) for doc in self.original_docs]
+                print(f"JSON loaded with {len(self.original_docs)} passages.")
+
+            else:
+                print(f"Attempting to load as Hugging Face dataset: {context_path}")
+                if isinstance(context_path, str):
+                    dataset_name = context_path
+                    dataset = load_dataset(dataset_name)
+                else:
+                    dataset_name, subset = context_path
+                    dataset = load_dataset(dataset_name, subset)
+
+                self.original_docs = [entry["text"] for entry in dataset["train"]]
+                self.cleaned_docs = [self.clean_text(doc) for doc in self.original_docs]
+                print(f"Dataset loaded with {len(self.original_docs)} passages.")
+
+        except json.JSONDecodeError:
+            raise ValueError(f"Provided path {context_path} is not a valid JSON file.")
+        except (ValueError, OSError) as e:
+            raise ValueError(
+                f"Provided path {context_path} could not be processed as JSON or Hugging Face dataset."
+            ) from e
+        print(f"Lengths of unique contexts: {len(self.original_docs)}")
 
     def get_sparse_embedding(self) -> NoReturn:
         """
@@ -185,18 +210,20 @@ class SparseRetrieval:
         # 위에서 p_embedding이 제대로 불러와졌는지 확인.
         # query or dataset이 string타입의 경우
         if isinstance(query_or_dataset, str):
-            doc_scores, doc_indices = self.get_relevant_doc(
-                query_or_dataset, k=topk
-            )  # 가장 유사도가 높은 k개의 query 또는 dataset 반환
+            # 가장 유사도가 높은 k개의 query 또는 dataset 반환
+            doc_scores, doc_indices = self.get_relevant_doc(query_or_dataset, k=topk)
             print("[Search query]\n", query_or_dataset, "\n")
+
             # k개 만큼의 결과 출력
-            for i in range(topk):
-                print(f"Top-{i+1} passage with score {doc_scores[i]:4f}")
-                print(self.original_docs[doc_indices[i]])
+            retrieved_passages = [self.original_docs[idx] for idx in doc_indices]
+
+            for i, passage in enumerate(retrieved_passages):
+                print(f"Top-{i+1} passage with score {doc_scores[i]:.4f}")
+                print(passage)
 
             return (
                 doc_scores,
-                [self.original_docs[doc_indices[i]] for i in range(topk)],
+                retrieved_passages,
             )
         # query or dataset이 dataset이 아닐경우 -> 이는 쿼리가 한개가 아니라 여러개라는 의미.
         elif isinstance(query_or_dataset, Dataset):

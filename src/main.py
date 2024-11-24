@@ -6,13 +6,16 @@ import numpy as np
 import pandas as pd
 import torch
 import wandb
+from konlpy.tag import Mecab
 from peft import AutoPeftModelForCausalLM, LoraConfig
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.trainer_utils import get_last_checkpoint
-from trl import DataCollatorForCompletionOnlyLM, SFTTrainer
+from trl import DataCollatorForCompletionOnlyLM
 
+from src._path import *
 from src.customTrainer import CustomTrainer
+from src.retriever.retrieval.sparse_retrieval import SparseRetrieval
 from src.utils import (
     check_git_status,
     check_no_error,
@@ -46,6 +49,21 @@ tokenizer = AutoTokenizer.from_pretrained(
     model_args.tokenizer_name,
     trust_remote_code=True,
 )
+
+mecab = Mecab()
+retriever = SparseRetrieval(
+    tokenize_fn=mecab.morphs,
+    data_path=DATA_PATH,
+    context_path=["wikimedia/wikipedia", "20231101.ko"],
+    mode="bm25",
+    max_feature=1000000,
+    ngram_range=(1, 2),
+    k1=1.1,
+    b=0.5,
+)
+retriever.get_sparse_embedding()
+query = "한국의 수도는 어디인가?"  # Example query in Korean
+scores, passages = retriever.retrieve(query, topk=5)
 
 tokenizer.chat_template = "{% if messages[0]['role'] == 'system' %}{% set system_message = messages[0]['content'] %}{% endif %}{% if system_message is defined %}{{ system_message }}{% endif %}{% for message in messages %}{% set content = message['content'] %}{% if message['role'] == 'user' %}{{ '<start_of_turn>user\n' + content + '<end_of_turn>\n<start_of_turn>model\n' }}{% elif message['role'] == 'assistant' %}{{ content + '<end_of_turn>\n' }}{% endif %}{% endfor %}"
 tokenizer.pad_token = tokenizer.eos_token

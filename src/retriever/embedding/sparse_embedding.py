@@ -1,5 +1,6 @@
 import pickle
 from collections import Counter
+from multiprocessing import Pool, cpu_count
 from typing import List
 
 import numpy as np
@@ -40,9 +41,12 @@ class SparseEmbedding:
         self.k1, self.b = k1, b
         if docs is not None:
             print("Start Initializing...")
-            self.tokenized_docs = [
-                self.tokenizer(doc) for doc in tqdm(docs, desc="Tokenizing...")
-            ]
+
+            self.tokenized_docs = self.parallel_tokenize(self.docs)
+            # self.tokenized_docs = [
+            #     self.tokenizer(doc) for doc in tqdm(docs, desc="Tokenizing...")
+            # ]
+
             print("Generating n-grams and building vocabulary...")
             self._generate_ngrams_and_update_vocab()
             self.initialize_embedding_function()
@@ -142,3 +146,10 @@ class SparseEmbedding:
                 raise ValueError(f"Loaded data is missing essential attribute: {attr}")
 
         return instance
+
+    def parallel_tokenize(self, documents):
+        with Pool(cpu_count()) as pool:
+            tokenized_docs = list(
+                tqdm(pool.imap(self.tokenizer, documents), total=len(documents))
+            )
+        return tokenized_docs
