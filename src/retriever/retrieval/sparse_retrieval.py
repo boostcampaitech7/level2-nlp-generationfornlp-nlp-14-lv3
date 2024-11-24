@@ -271,7 +271,7 @@ class SparseRetrieval:
         # 위에서 선언한 contextmanager 들고와서 걸리는 시간 Check!
         with timer("transform"):
             query = self.clean_text(query)
-            query_vec = self.sparse_embed.transform([query])  # 쿼리문을 벡터화
+            query_vec = self.sparse_embed.transform(query)  # 쿼리문을 벡터화
         # 쿼리문이 정상적으로 바뀌였는지 확인
         assert (
             np.sum(query_vec) != 0

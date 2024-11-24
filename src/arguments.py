@@ -42,6 +42,10 @@ class ModelArguments:
         default=0.05,
         metadata={"help": "The dropout probability for Lora layers."},
     )
+    spr_max_features: int = field(
+        default=1_000_000,
+        metadata={"help": "Number of max features in sparse retriever."},
+    )
 
 
 @dataclass
