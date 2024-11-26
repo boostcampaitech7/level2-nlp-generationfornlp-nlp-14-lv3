@@ -106,13 +106,9 @@ class SparseRetrieval:
         try:
             # 원본 텍스트와 정제된 텍스트의 매핑 사전 생성
             if isinstance(context_path, str) and os.path.isfile(context_path):
-                print(f"Attempting to load as JSON file: {context_path}")
-                with open(context_path, "r", encoding="utf-8") as f:
-                    wiki = json.load(f)
-
-                self.original_docs = list(
-                    dict.fromkeys([v["text"] for v in wiki.values()])
-                )
+                print(f"Attempting to load as CSV file: {context_path}")
+                wiki = pd.read_csv(context_path)
+                self.original_docs = list(wiki["text"])
                 self.cleaned_docs = [self.clean_text(doc) for doc in self.original_docs]
                 print(f"JSON loaded with {len(self.original_docs)} passages.")
 

@@ -1,7 +1,11 @@
+from multiprocessing import Pool, cpu_count
+
 import numpy as np
 from numba import njit, prange
 from scipy.sparse import csr_matrix, vstack
 from tqdm import tqdm
+
+from .ngram import get_ngrams_parallel
 
 
 class Bm25:
@@ -72,19 +76,11 @@ class Bm25:
         )
         return csr_matrix(batch_embed)
 
-    def _get_ngrams(self, tokens):
-        n_grams = []
-        for n in range(self.ngram_range[0], self.ngram_range[1] + 1):
-            n_grams.extend(
-                [" ".join(tokens[i : i + n]) for i in range(len(tokens) - n + 1)]
-            )
-        return n_grams
-
     def transform(self, tokenized_query):
         query_ids = np.array(
             [
                 self.token_to_id[token]
-                for token in self._get_ngrams(tokenized_query)
+                for token in get_ngrams_parallel(tokenized_query, self.ngram_range)
                 if token in self.token_to_id
             ],
             dtype=np.int64,
@@ -97,7 +93,7 @@ class Bm25:
             np.array(
                 [
                     self.token_to_id[token]
-                    for token in self._get_ngrams(doc)
+                    for token in get_ngrams_parallel(doc, self.ngram_range)
                     if token in self.token_to_id
                 ],
                 dtype=np.int64,

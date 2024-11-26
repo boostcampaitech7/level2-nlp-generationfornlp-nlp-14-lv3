@@ -34,6 +34,8 @@ from src.utils import (
     set_seed,
 )
 
+os.environ["TOKENIZERS_PARALLELISM"] = "true"
+
 
 def main():
     DEVICE = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
@@ -62,10 +64,10 @@ def main():
     retriever = SparseRetrieval(
         tokenize_fn=tokenizer,
         data_path=DATA_PATH,
-        context_path=["wikimedia/wikipedia", "20231101.ko"],
+        context_path=os.path.join(DATA_PATH, "filtered_wikipedia.csv"),
         mode="bm25",
         max_feature=model_args.spr_max_features,
-        ngram_range=(1, 2),
+        ngram_range=(2, 2),
         k1=1.1,
         b=0.5,
     )

@@ -8,6 +8,8 @@ from tqdm import tqdm
 
 import src.retriever.embedding as embedding_function
 
+from .ngram import get_ngrams_parallel
+
 
 class SparseEmbedding:
     def __init__(
@@ -90,7 +92,9 @@ class SparseEmbedding:
         new_vocab = Counter()
         new_doc_freqs = Counter()
         for doc in tqdm(self.tokenized_docs, desc="Generating n-grams"):
-            doc_ngrams = self._get_ngrams(doc)
+            doc_ngrams = get_ngrams_parallel(
+                tokens=doc["input_ids"], ngram_range=self.ngram_range
+            )
             new_vocab.update(doc_ngrams)
             new_doc_freqs.update(set(doc_ngrams))
 
@@ -99,14 +103,6 @@ class SparseEmbedding:
 
         self.vocab = {word: idx for idx, word in enumerate(new_vocab)}
         self.doc_freqs = {word: new_doc_freqs[word] for word in self.vocab}
-
-    def _get_ngrams(self, tokens):  # (1,2)
-        n_grams = []
-        for n in range(self.ngram_range[0], self.ngram_range[1] + 1):
-            n_grams.extend(
-                [" ".join(tokens[i : i + n]) for i in range(len(tokens) - n + 1)]
-            )
-        return n_grams
 
     def save(self, filename: str):
         with open(filename, "wb") as f:
@@ -153,3 +149,6 @@ class SparseEmbedding:
                 tqdm(pool.imap(self.tokenizer, documents), total=len(documents))
             )
         return tokenized_docs
+
+    def _parallel_ngrams(self, tokens):
+        n_grams = []
