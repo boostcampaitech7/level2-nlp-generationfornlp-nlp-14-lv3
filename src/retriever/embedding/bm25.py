@@ -1,8 +1,5 @@
-import math
-
 import numpy as np
 from numba import njit, prange
-from numba.typed import List
 from scipy.sparse import csr_matrix, vstack
 from tqdm import tqdm
 
@@ -119,10 +116,10 @@ def _process_batch_numba(
         doc_ids = batch_doc_ids[i]
         doc_len = doc_lengths_batch[i]
         freq_dict = np.zeros(vocab_size, dtype=np.int32)
-        # Count term frequencies in the document
+
         for token_id in doc_ids:
             freq_dict[token_id] += 1
-        # Compute BM25 scores
+
         for idx in range(vocab_size):
             freq = freq_dict[idx]
             if freq > 0:
