@@ -1,6 +1,7 @@
 data/
 .DS_Store
 args*.json
+scheduler.json
 __pycache__/
 experiments/
 *.bak
