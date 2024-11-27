@@ -9,34 +9,33 @@ import wandb
 from peft import AutoPeftModelForCausalLM, LoraConfig
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.trainer_utils import get_last_checkpoint
 from trl import DataCollatorForCompletionOnlyLM, SFTTrainer
 
-from customTrainer import CustomTrainer
-from utils import (
+from src.customTrainer import CustomTrainer
+from src.utils import (
     check_git_status,
     check_no_error,
     create_experiment_dir,
     get_arguments,
     get_flatten_dataset,
-    get_latest_checkpoint,
     get_processed_dataset,
     save_args,
     set_seed,
 )
 
-logger = logging.getLogger(__name__)
-
-logging.basicConfig(
-    format="%(asctime)s - %(levelname)s - %(name)s -    %(message)s",
-    datefmt="%m/%d/%Y %H:%M:%S",
-)
-
+DEVICE = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 commit_id = check_git_status()
 experiment_dir = create_experiment_dir()
 model_args, data_args, sft_args, json_args = get_arguments(experiment_dir)
 
 set_seed(sft_args.seed)
-DEVICE = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    format="%(asctime)s - %(levelname)s - %(name)s -    %(message)s",
+    datefmt="%m/%d/%Y %H:%M:%S",
+)
+
 
 model = AutoModelForCausalLM.from_pretrained(
     model_args.model_name_or_path,
@@ -107,20 +106,9 @@ eval_tokenized_dataset = eval_processed_dataset.map(
     desc="Tokenizing",
 )
 
-train_tokenized_dataset = train_tokenized_dataset.filter(
-    lambda x: len(x["input_ids"]) <= 1024
-)
-# eval_tokenized_dataset = eval_tokenized_dataset.filter(lambda x: len(x["input_ids"]) <= 1024)
-
 train_dataset = train_tokenized_dataset
 eval_dataset = eval_tokenized_dataset
 
-print(
-    tokenizer.decode(train_tokenized_dataset[0]["input_ids"], skip_special_tokens=True)
-)
-print(
-    tokenizer.decode(eval_tokenized_dataset[0]["input_ids"], skip_special_tokens=True)
-)
 
 response_template = "<start_of_turn>model"
 data_collator = DataCollatorForCompletionOnlyLM(
@@ -162,9 +150,9 @@ def preprocess_logits_for_metrics(logits, labels):
 
 
 peft_config = LoraConfig(
-    r=6,
-    lora_alpha=8,
-    lora_dropout=0.05,
+    r=model_args.lora_r,
+    lora_alpha=model_args.lora_alpha,
+    lora_dropout=model_args.lora_dropout,
     target_modules=["q_proj", "k_proj"],
     bias="none",
     task_type="CAUSAL_LM",
@@ -212,66 +200,33 @@ if sft_args.do_train:
             logger.info(f"  {key} = {value}")
             writer.write(f"{key} = {value}\n")
 
-    # State 저장
     trainer.state.save_to_json(os.path.join(sft_args.output_dir, "trainer_state.json"))
 
-    if sft_args.do_eval:
-        infer_results, metrics = trainer.evaluate()
-        trainer.log_metrics("eval", metrics)
-        trainer.save_metrics("eval", metrics)
-        predictions_df = pd.DataFrame(infer_results)
-        predictions_df.to_csv(
-            os.path.join(sft_args.output_dir, "eval_output.csv"), index=False
+if sft_args.do_eval:
+    if not sft_args.do_train:
+        checkpoint_path = get_last_checkpoint(model_args.predict_model_name_or_path)
+        model = AutoPeftModelForCausalLM.from_pretrained(
+            checkpoint_path,
+            trust_remote_code=True,
+            torch_dtype=torch.float16,
+            device_map="auto",
         )
+        tokenizer = AutoTokenizer.from_pretrained(
+            checkpoint_path,
+            trust_remote_code=True,
+        )
+    infer_results, metrics = trainer.evaluate()
+    trainer.log_metrics("eval", metrics)
+    trainer.save_metrics("eval", metrics)
+    predictions_df = pd.DataFrame(infer_results)
+    predictions_df.to_csv(
+        os.path.join(sft_args.output_dir, "eval_output.csv"), index=False
+    )
 
-        # pred_choices_map = {0: "1", 1: "2", 2: "3", 3: "4", 4: "5"}
-        # infer_results = []
-
-        # model.eval()
-        # with torch.no_grad():
-        #     for data in tqdm(eval_processed_dataset):
-        #         _id = data["id"]
-        #         messages = data["messages"]
-        #         len_choices = data["len_choices"]
-
-        #         outputs = model(
-        #             tokenizer.apply_chat_template(
-        #                 messages,
-        #                 tokenize=True,
-        #                 add_generation_prompt=True,
-        #                 return_tensors="pt",
-        #             ).to(DEVICE)
-        #         )
-
-        #         logits = outputs.logits[:, -1].flatten().cpu()
-
-        #         target_logit_list = [logits[tokenizer.vocab[str(i + 1)]] for i in range(len_choices)]
-
-        #         probs = (
-        #             torch.nn.functional.softmax(
-        #                 torch.tensor(target_logit_list, dtype=torch.float32)
-        #             )
-        #             .detach()
-        #             .cpu()
-        #             .numpy()
-        #         )
-
-        #         predict_value = pred_choices_map[np.argmax(probs, axis=-1)]
-        #         infer_results.append({"id": _id, "answer": predict_value})
-
-        # predictions_df = pd.DataFrame(infer_results)
-        # predictions_df.to_csv(
-        #     os.path.join(sft_args.output_dir, "eval_output.csv"), index=False
-        # )
 
 if sft_args.do_predict:
     if not sft_args.do_train:
-        checkpoint_path = (
-            model_args.predict_model_name_or_path
-            if model_args.predict_model_name_or_path
-            else get_latest_checkpoint(sft_args.output_dir)
-        )
-
+        checkpoint_path = get_last_checkpoint(model_args.predict_model_name_or_path)
         model = AutoPeftModelForCausalLM.from_pretrained(
             checkpoint_path,
             trust_remote_code=True,
@@ -289,52 +244,6 @@ if sft_args.do_predict:
     predictions_df = pd.DataFrame(infer_results)
     predictions_df.to_csv(os.path.join(sft_args.output_dir, "output.csv"), index=False)
 
-#     test_tokenized_dataset = test_processed_dataset.map(
-#         tokenize,
-#         batched=True,
-#         num_proc=4,
-#         load_from_cache_file=True,
-#         desc="Tokenizing",
-#     )
-
-#     infer_results = []
-#     pred_choices_map = {0: "1", 1: "2", 2: "3", 3: "4", 4: "5"}
-
-#     model.eval()
-#     with torch.inference_mode():
-#         for data in tqdm(test_processed_dataset):
-#             _id = data["id"]
-#             messages = data["messages"]
-#             len_choices = data["len_choices"]
-
-#             outputs = model(
-#                 tokenizer.apply_chat_template(
-#                     messages,
-#                     tokenize=True,
-#                     add_generation_prompt=True,
-#                     return_tensors="pt",
-#                 ).to(DEVICE)
-#             )
-
-#             logits = outputs.logits[:, -1].flatten().cpu()
-
-#             target_logit_list = [logits[tokenizer.vocab[str(i + 1)]] for i in range(len_choices)]
-
-#             probs = (
-#                 torch.nn.functional.softmax(
-#                     torch.tensor(target_logit_list, dtype=torch.float32)
-#                 )
-#                 .detach()
-#                 .cpu()
-#                 .numpy()
-#             )
-
-#             predict_value = pred_choices_map[np.argmax(probs, axis=-1)]
-#             infer_results.append({"id": _id, "answer": predict_value})
-#             print(probs, infer_results[-1])
-
-#     predictions_df = pd.DataFrame(infer_results)
-#     predictions_df.to_csv(os.path.join(sft_args.output_dir, "output.csv"), index=False)
 
 if sft_args.do_train or sft_args.do_eval:
     save_args(json_args, experiment_dir, commit_id)

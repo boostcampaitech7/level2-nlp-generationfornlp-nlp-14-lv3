@@ -16,34 +16,35 @@ from transformers import HfArgumentParser, PreTrainedTokenizerFast, TrainingArgu
 from transformers.trainer_utils import get_last_checkpoint
 from trl import SFTConfig
 
-from arguments import DataTrainingArguments, ModelArguments
+from src._path import *
+from src.arguments import DataTrainingArguments, ModelArguments
 
 logger = logging.getLogger(__name__)
 
 
 def check_git_status():
     repo = git.Repo(search_parent_directories=True)
-    # if repo.is_dirty():
-    # raise Exception(
-    #     "Uncommitted changes in the repository. Commit or stash changes before running the experiment."
-    # )
+    if repo.is_dirty():
+        raise Exception(
+            "Uncommitted changes in the repository. Commit or stash changes before running the experiment."
+        )
     return repo.head.commit.hexsha
 
 
-def create_experiment_dir(base_dir="../experiments"):
+def create_experiment_dir(base_dir=EXP_PATH):
     kst = timezone(timedelta(hours=9))
     timestamp = datetime.now(kst).strftime("%Y%m%d_%H%M%S")
-    experiment_dir = os.path.join(base_dir, timestamp)
-    os.makedirs(experiment_dir, exist_ok=True)
-    return experiment_dir
+    output_dir = os.path.join(base_dir, timestamp)
+    os.makedirs(output_dir, exist_ok=True)
+    return output_dir
 
 
-def save_args(args_dict, experiment_dir, commit_id):
-    args_path = os.path.join(experiment_dir, "args.json")
+def save_args(args_dict, output_dir, commit_id):
+    args_path = os.path.join(output_dir, "args.json")
     with open(args_path, "w") as f:
         json.dump(args_dict, f, indent=4)
 
-    with open(os.path.join(experiment_dir, "git_commit.txt"), "w") as f:
+    with open(os.path.join(output_dir, "git_commit.txt"), "w") as f:
         f.write(f"Git Commit ID: {commit_id}\n")
 
 
@@ -55,19 +56,19 @@ def load_args_from_json(json_file):
     return args_dict
 
 
-def get_arguments(experiment_dir):
+def get_arguments(output_dir):
     # Initialize the parser
     parser = HfArgumentParser((ModelArguments, DataTrainingArguments, SFTConfig))
 
-    args_json_path = "../args.json"
+    args_json_path = os.path.join(ROOT, "args.json")
     if os.path.exists(args_json_path):
         json_args = load_args_from_json(args_json_path)
     else:
         json_args = {}
 
-    # Ensure output_dir is set to experiment_dir
-    json_args["output_dir"] = experiment_dir
-    json_args["logging_dir"] = experiment_dir
+    # Ensure output_dir is set from argument
+    json_args["output_dir"] = output_dir
+    json_args["logging_dir"] = output_dir
 
     # Parse command-line arguments
     parser.set_defaults(**json_args)
@@ -77,32 +78,6 @@ def get_arguments(experiment_dir):
     )
 
     return model_args, data_args, sft_args, json_args
-
-
-def get_inference_arguments(experiment_dir):
-    # Initialize the parser
-    parser = HfArgumentParser(
-        (ModelArguments, DataTrainingArguments, TrainingArguments)
-    )
-
-    args_json_path = "../args_inference.json"
-    if os.path.exists(args_json_path):
-        json_args = load_args_from_json(args_json_path)
-    else:
-        json_args = {}
-
-    # Ensure output_dir is set to experiment_dir
-    json_args["output_dir"] = experiment_dir
-    json_args["data_path"] = json_args["model_name_or_path"]
-
-    # Parse command-line arguments
-    parser.set_defaults(**json_args)
-    combined_args = get_combined_args(json_args)
-    model_args, data_args, training_args = parser.parse_args_into_dataclasses(
-        args=combined_args
-    )
-
-    return model_args, data_args, training_args, json_args
 
 
 def get_combined_args(json_args):
@@ -203,7 +178,7 @@ def get_processed_dataset(dataset):
             {
                 "id": row["id"],
                 "messages": messages,
-                "label": row.get("answer", None),
+                "labels": row.get("answer", None),
                 "len_choices": len_choices,
             }
         )
@@ -234,25 +209,6 @@ def check_no_error(
     max_seq_length = min(max_seq_length, tokenizer.model_max_length)
 
     return max_seq_length
-
-
-def get_latest_checkpoint(checkpoint_dir):
-    # List all directories in the checkpoint folder
-    checkpoint_dirs = [
-        d
-        for d in os.listdir(checkpoint_dir)
-        if os.path.isdir(os.path.join(checkpoint_dir, d))
-    ]
-
-    # Filter directories by a specific naming convention, e.g., "checkpoint-{step_number}"
-    checkpoint_dirs = [d for d in checkpoint_dirs if d.startswith("checkpoint-")]
-
-    # Extract step numbers and find the highest one
-    latest_checkpoint = max(
-        checkpoint_dirs,
-        key=lambda x: int(x.split("-")[-1]),  # Assumes "checkpoint-{step_number}"
-    )
-    return os.path.join(checkpoint_dir, latest_checkpoint)
 
 
 PROMPT_NO_QUESTION_PLUS = """지문:

@@ -63,9 +63,9 @@ class CustomTrainer(SFTTrainer):
 
         # Calculate metrics if we have labels
         metrics = {}
-        if "label" in eval_dataset.features:
+        if "labels" in eval_dataset.features:
             predictions = [int(result["answer"]) for result in infer_results]
-            references = [int(data["label"]) for data in eval_dataset]
+            references = [int(data["labels"]) for data in eval_dataset]
 
             correct = sum(p == r for p, r in zip(predictions, references))
             total = len(predictions)
