@@ -13,6 +13,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.trainer_utils import get_last_checkpoint
 from trl import DataCollatorForCompletionOnlyLM
 
+from src._path import *
 from src.customTrainer import CustomTrainer
 from src.utils import (
     check_git_status,
@@ -23,7 +24,9 @@ from src.utils import (
     get_processed_dataset,
     save_args,
     set_seed,
+    empty_memory,
 )
+# os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:400,garbage_collection_threshold:0.6'
 
 
 def run_generation():

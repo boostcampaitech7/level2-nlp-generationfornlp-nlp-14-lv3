@@ -6,7 +6,16 @@ import sys
 from ast import literal_eval
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional, Tuple
-
+from contextlib import contextmanager
+import time
+import gc
+@contextmanager
+def timer(name):
+    t0 = time.time()
+    yield
+    print(f"[{name}] done in {time.time() - t0:.3f} s")
+from src.retriever.retrieval.sparse_retrieval import SparseRetrieval
+from transformers import AutoTokenizer
 import git
 import numpy as np
 import pandas as pd
@@ -15,7 +24,6 @@ from datasets import Dataset, DatasetDict
 from transformers import HfArgumentParser, PreTrainedTokenizerFast, TrainingArguments
 from transformers.trainer_utils import get_last_checkpoint
 from trl import SFTConfig
-
 from src._path import *
 from src.arguments import DataTrainingArguments, ModelArguments
 
@@ -24,10 +32,10 @@ logger = logging.getLogger(__name__)
 
 def check_git_status():
     repo = git.Repo(search_parent_directories=True)
-    if repo.is_dirty():
-        raise Exception(
-            "Uncommitted changes in the repository. Commit or stash changes before running the experiment."
-        )
+    # if repo.is_dirty():
+    #     raise Exception(
+    #         "Uncommitted changes in the repository. Commit or stash changes before running the experiment."
+    #     )
     return repo.head.commit.hexsha
 
 
@@ -110,9 +118,27 @@ def set_seed(random_seed):
     random.seed(random_seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
+    
+def rag_system(df, tokenizer):
+    try:
+        retriever = SparseRetrieval(
+            tokenize_fn=tokenizer.tokenize,
+            data_path=DATA_PATH,
+            context_path=os.path.join(DATA_PATH, "filtered_wikipedia.json"),
+            mode="bm25",
+            max_feature=100_000,
+            ngram_range=(1, 2),
+            k1=1.1,
+            b=0.5,
+        )
+        retriever.get_sparse_embedding()
+        rag_df = retriever.retrieve(df, topk=2)
+        del retriever
+        return rag_df
+    except FileNotFoundError:
+        return df
 
-
-def get_flatten_dataset(datasets):
+def get_flatten_dataset(datasets, tokenizer):
     records = []
     for _, row in datasets.iterrows():
         problems = literal_eval(row["problems"])
@@ -140,7 +166,8 @@ def get_flatten_dataset(datasets):
         axis=1,
     )
     df["question_length"] = df["full_question"].apply(len)
-    return Dataset.from_pandas(df)
+    rag_df = rag_system(df, tokenizer)
+    return Dataset.from_pandas(rag_df)
 
 
 def counterbalance_eval_datasets(flatten_datasets):
@@ -176,18 +203,20 @@ def get_processed_dataset(dataset):
             [f"{idx + 1} - {choice}" for idx, choice in enumerate(row["choices"])]
         )
         len_choices = len(row["choices"])
-
+        retrieval_context = row["retrieval_context"] if len(row['paragraph']) < 100 else "" 
         if row["question_plus"]:
             user_message = PROMPT_QUESTION_PLUS.format(
                 paragraph=row["paragraph"],
                 question=row["question"],
                 question_plus=row["question_plus"],
+                rag= retrieval_context,
                 choices=choices_string,
             )
         else:
             user_message = PROMPT_NO_QUESTION_PLUS.format(
                 paragraph=row["paragraph"],
                 question=row["question"],
+                rag=retrieval_context,
                 choices=choices_string,
             )
 
@@ -207,6 +236,7 @@ def get_processed_dataset(dataset):
                 "len_choices": len_choices,
             }
         )
+        
     return Dataset.from_pandas(pd.DataFrame(processed_dataset))
 
 
@@ -236,29 +266,37 @@ def check_no_error(
     return max_seq_length
 
 
-PROMPT_NO_QUESTION_PLUS = """지문:
+PROMPT_NO_QUESTION_PLUS = """Paragraph:
 {paragraph}
 
-질문:
+Question:
 {question}
 
-선택지:
+More info:
+{rag}
+
+Choices:
 {choices}
 
-1, 2, 3, 4, 5 중에 하나를 정답으로 고르세요.
-정답:"""
+Choice one in 5 choices.
+This is very important to my career. 
+Answer:"""
 
-PROMPT_QUESTION_PLUS = """지문:
+PROMPT_QUESTION_PLUS = """Paragraph:
 {paragraph}
 
-질문:
+Question:
 {question}
 
-<보기>:
+More info:
 {question_plus}
 
-선택지:
+More info2:
+{rag}
+
+Choices:
 {choices}
 
-1, 2, 3, 4, 5 중에 하나를 정답으로 고르세요.
-정답:"""
+Choice one in 5 choices.
+This is very important to my career. 
+Answer:"""

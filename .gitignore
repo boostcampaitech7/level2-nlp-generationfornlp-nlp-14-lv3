@@ -6,3 +6,6 @@ __pycache__/
 experiments/
 *.bak
 .vscode/
+.git/
+level2/
+*.csv
