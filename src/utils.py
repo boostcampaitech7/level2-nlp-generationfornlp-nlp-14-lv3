@@ -143,6 +143,31 @@ def get_flatten_dataset(datasets):
     return Dataset.from_pandas(df)
 
 
+def counterbalance_eval_datasets(flatten_datasets):
+    """
+    Duplicate dataset and permutate answer choices
+    To ensure that model does not exploit biases, but rely on the actual content
+    """
+    new_flatten_datasets = []
+    
+    for flatten_dataset in flatten_datasets:
+        choices = flatten_dataset["choices"]
+        answer = flatten_dataset["answer"] - 1
+        for answer_candidate in range(len(choices)):
+            if answer_candidate == answer:
+                continue
+            new_flatten_dataset = flatten_dataset.copy()
+            new_flatten_dataset["answer"] = answer_candidate + 1
+
+            new_choices = choices.copy()
+            new_choices[answer], new_choices[answer_candidate] = new_choices[answer_candidate], new_choices[answer]
+            new_flatten_dataset["choices"] = new_choices
+            
+            new_flatten_datasets.append(new_flatten_dataset)
+    
+    return flatten_datasets.extend(new_flatten_datasets)
+
+
 def get_processed_dataset(dataset):
     processed_dataset = []
     for i in range(len(dataset)):

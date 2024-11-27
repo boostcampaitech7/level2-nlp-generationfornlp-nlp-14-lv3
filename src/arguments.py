@@ -94,3 +94,8 @@ class DataTrainingArguments:
         default=5,
         metadata={"help": "K-fold argument when using K-fold validation."},
     )
+    do_counterbalance: bool = field(
+        default=False,
+        metadata={"help": "Apply counterbalancing in evaluation."},
+    )
+

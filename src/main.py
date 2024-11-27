@@ -17,6 +17,7 @@ from src.customTrainer import CustomTrainer
 from src.utils import (
     check_git_status,
     create_experiment_dir,
+    counterbalance_eval_datasets,
     get_arguments,
     get_flatten_dataset,
     get_processed_dataset,
@@ -120,13 +121,15 @@ def run_generation():
         if eval_idx.size > 0:
             eval_flatten_datasets = flatten_datasets.select(eval_idx)
         else:
-            # If no eval indices, create a validation split
             split = train_flatten_datasets.train_test_split(
                 test_size=data_args.test_size, seed=sft_args.seed
             )
             train_flatten_datasets = split["train"]
             eval_flatten_datasets = split["test"]
 
+        if data_args.do_counterbalance:
+                eval_flatten_datasets = counterbalance_eval_datasets(eval_flatten_datasets)
+        
         # Preprocess and tokenize datasets
         def preprocess_and_tokenize(dataset):
             processed_dataset = get_processed_dataset(dataset)
