@@ -86,3 +86,11 @@ class DataTrainingArguments:
             "help": "The ratio of train and validation data size for train_test_split function."
         },
     )
+    do_kfold: bool = field(
+        default=False,
+        metadata={"help": "Do K-fold validation if set to be True."},
+    )
+    n_splits: int = field(
+        default=5,
+        metadata={"help": "K-fold argument when using K-fold validation."},
+    )
