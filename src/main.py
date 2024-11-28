@@ -36,25 +36,25 @@ def run_generation():
         datefmt="%m/%d/%Y %H:%M:%S",
     )
 
-    # Load model and tokenizer
-    model = AutoModelForCausalLM.from_pretrained(
-        model_args.model_name_or_path,
-        trust_remote_code=True,
-        torch_dtype=torch.float16,
-    )
-    tokenizer = AutoTokenizer.from_pretrained(
-        model_args.tokenizer_name,
-        trust_remote_code=True,
-    )
+    if sft_args.do_train:
+        model = AutoModelForCausalLM.from_pretrained(
+            model_args.model_name_or_path,
+            trust_remote_code=True,
+            torch_dtype=torch.float16,
+        )
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_args.tokenizer_name,
+            trust_remote_code=True,
+        )
 
-    tokenizer.chat_template = "{% if messages[0]['role'] == 'system' %}{% set system_message = messages[0]['content'] %}{% endif %}{% if system_message is defined %}{{ system_message }}{% endif %}{% for message in messages %}{% set content = message['content'] %}{% if message['role'] == 'user' %}{{ '<start_of_turn>user\n' + content + '<end_of_turn>\n<start_of_turn>model\n' }}{% elif message['role'] == 'assistant' %}{{ content + '<end_of_turn>\n' }}{% endif %}{% endfor %}"
-    tokenizer.pad_token = tokenizer.eos_token
-    tokenizer.pad_token_id = tokenizer.eos_token_id
-    tokenizer.padding_side = "right"
+        tokenizer.chat_template = "{% if messages[0]['role'] == 'system' %}{% set system_message = messages[0]['content'] %}{% endif %}{% if system_message is defined %}{{ system_message }}{% endif %}{% for message in messages %}{% set content = message['content'] %}{% if message['role'] == 'user' %}{{ '<start_of_turn>user\n' + content + '<end_of_turn>\n<start_of_turn>model\n' }}{% elif message['role'] == 'assistant' %}{{ content + '<end_of_turn>\n' }}{% endif %}{% endfor %}"
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+        tokenizer.padding_side = "right"
 
-    # Load and preprocess datasets
-    datasets = pd.read_csv(data_args.dataset_name)
-    flatten_datasets = get_flatten_dataset(datasets)
+        # Load and preprocess datasets
+        datasets = pd.read_csv(data_args.dataset_name)
+        flatten_datasets = get_flatten_dataset(datasets)
 
     def tokenize(element):
         outputs = tokenizer(
@@ -103,9 +103,12 @@ def run_generation():
     n_splits = data_args.n_splits if do_kfold else 1
 
     if do_kfold:
-        kf = KFold(n_splits=n_splits, shuffle=True, random_state=sft_args.seed)
-        splits = list(kf.split(flatten_datasets))
-        fold_results, eval_results, predict_results = [], [], []
+        if sft_args.do_train:
+            kf = KFold(n_splits=n_splits, shuffle=True, random_state=sft_args.seed)
+            splits = list(kf.split(flatten_datasets))
+            fold_results, eval_results, predict_results = [], [], []
+        else:
+            splits = [(np.arange(1), np.array([]))]
     else:
         # Use entire dataset for training if not doing k-fold or n_splits == 1
         splits = [(np.arange(len(flatten_datasets)), np.array([]))]
@@ -215,6 +218,11 @@ def run_generation():
                     checkpoint_path,
                     trust_remote_code=True,
                 )
+                tokenizer.chat_template = "{% if messages[0]['role'] == 'system' %}{% set system_message = messages[0]['content'] %}{% endif %}{% if system_message is defined %}{{ system_message }}{% endif %}{% for message in messages %}{% set content = message['content'] %}{% if message['role'] == 'user' %}{{ '<start_of_turn>user\n' + content + '<end_of_turn>\n<start_of_turn>model\n' }}{% elif message['role'] == 'assistant' %}{{ content + '<end_of_turn>\n' }}{% endif %}{% endfor %}"
+                tokenizer.pad_token = tokenizer.eos_token
+                tokenizer.pad_token_id = tokenizer.eos_token_id
+                tokenizer.padding_side = "right"
+
             eval_metrics = trainer.evaluate()
             metrics = eval_metrics.metrics
             predictions = eval_metrics.predictions
