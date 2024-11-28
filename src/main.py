@@ -40,25 +40,25 @@ def run_generation():
         datefmt="%m/%d/%Y %H:%M:%S",
     )
 
-    # Load model and tokenizer
-    model = AutoModelForCausalLM.from_pretrained(
-        model_args.model_name_or_path,
-        trust_remote_code=True,
-        torch_dtype=torch.float16,
-    )
-    tokenizer = AutoTokenizer.from_pretrained(
-        model_args.tokenizer_name,
-        trust_remote_code=True,
-    )
+    if sft_args.do_train:
+        model = AutoModelForCausalLM.from_pretrained(
+            model_args.model_name_or_path,
+            trust_remote_code=True,
+            torch_dtype=torch.float16,
+        )
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_args.tokenizer_name,
+            trust_remote_code=True,
+        )
 
-    tokenizer.chat_template = "{% if messages[0]['role'] == 'system' %}{% set system_message = messages[0]['content'] %}{% endif %}{% if system_message is defined %}{{ system_message }}{% endif %}{% for message in messages %}{% set content = message['content'] %}{% if message['role'] == 'user' %}{{ '<start_of_turn>user\n' + content + '<end_of_turn>\n<start_of_turn>model\n' }}{% elif message['role'] == 'assistant' %}{{ content + '<end_of_turn>\n' }}{% endif %}{% endfor %}"
-    tokenizer.pad_token = tokenizer.eos_token
-    tokenizer.pad_token_id = tokenizer.eos_token_id
-    tokenizer.padding_side = "right"
+        tokenizer.chat_template = "{% if messages[0]['role'] == 'system' %}{% set system_message = messages[0]['content'] %}{% endif %}{% if system_message is defined %}{{ system_message }}{% endif %}{% for message in messages %}{% set content = message['content'] %}{% if message['role'] == 'user' %}{{ '<start_of_turn>user\n' + content + '<end_of_turn>\n<start_of_turn>model\n' }}{% elif message['role'] == 'assistant' %}{{ content + '<end_of_turn>\n' }}{% endif %}{% endfor %}"
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+        tokenizer.padding_side = "right"
 
-    # Load and preprocess datasets
-    datasets = pd.read_csv(data_args.dataset_name)
-    flatten_datasets = get_flatten_dataset(datasets)
+        # Load and preprocess datasets
+        datasets = pd.read_csv(data_args.dataset_name)
+        flatten_datasets = get_flatten_dataset(datasets)
 
     def tokenize(element):
         outputs = tokenizer(
@@ -107,9 +107,12 @@ def run_generation():
     n_splits = data_args.n_splits if do_kfold else 1
 
     if do_kfold:
-        kf = KFold(n_splits=n_splits, shuffle=True, random_state=sft_args.seed)
-        splits = list(kf.split(flatten_datasets))
-        fold_results, eval_results, predict_results = [], [], []
+        if sft_args.do_train:
+            kf = KFold(n_splits=n_splits, shuffle=True, random_state=sft_args.seed)
+            splits = list(kf.split(flatten_datasets))
+            fold_results, eval_results, predict_results = [], [], []
+        else:
+            splits = [(np.arange(1), np.array([]))]
     else:
         # Use entire dataset for training if not doing k-fold or n_splits == 1
         splits = [(np.arange(len(flatten_datasets)), np.array([]))]
@@ -177,6 +180,64 @@ def run_generation():
 
         # Training
         if sft_args.do_train:
+            logger.info(f"Starting Fold {fold + 1}/{n_splits}")
+            kfold_dir = os.path.join(experiment_dir, f"fold_{fold + 1}")
+            os.makedirs(kfold_dir, exist_ok=True)
+
+            # Split datasets
+            train_flatten_datasets = flatten_datasets.select(train_idx)
+            if eval_idx.size > 0:
+                eval_flatten_datasets = flatten_datasets.select(eval_idx)
+            else:
+                # If no eval indices, create a validation split
+                split = train_flatten_datasets.train_test_split(
+                    test_size=data_args.test_size, seed=sft_args.seed
+                )
+                train_flatten_datasets = split["train"]
+                eval_flatten_datasets = split["test"]
+
+            # Preprocess and tokenize datasets
+            def preprocess_and_tokenize(dataset):
+                processed_dataset = get_processed_dataset(dataset)
+                return processed_dataset.map(
+                    tokenize,
+                    batched=True,
+                    num_proc=4,
+                    load_from_cache_file=True,
+                    desc="Tokenizing",
+                )
+
+            train_tokenized_dataset = preprocess_and_tokenize(train_flatten_datasets)
+            eval_tokenized_dataset = preprocess_and_tokenize(eval_flatten_datasets)
+
+            # Prepare data collator and trainer
+            response_template = "<start_of_turn>model"
+            data_collator = DataCollatorForCompletionOnlyLM(
+                response_template=response_template,
+                tokenizer=tokenizer,
+            )
+
+            peft_config = LoraConfig(
+                r=model_args.lora_r,
+                lora_alpha=model_args.lora_alpha,
+                lora_dropout=model_args.lora_dropout,
+                target_modules=["q_proj", "k_proj"],
+                bias="none",
+                task_type="CAUSAL_LM",
+            )
+
+            trainer = CustomTrainer(
+                model=model,
+                args=sft_args,
+                train_dataset=train_tokenized_dataset if sft_args.do_train else None,
+                eval_dataset=eval_tokenized_dataset if sft_args.do_eval else None,
+                data_collator=data_collator,
+                tokenizer=tokenizer,
+                compute_metrics=compute_metrics,
+                preprocess_logits_for_metrics=preprocess_logits_for_metrics,
+                peft_config=peft_config,
+            )
+
             wandb.init(project="GEN", name=sft_args.run_name, dir=sft_args.output_dir)
             logger.info("Training/evaluation parameters %s", sft_args)
 
@@ -221,6 +282,11 @@ def run_generation():
                     checkpoint_path,
                     trust_remote_code=True,
                 )
+                tokenizer.chat_template = "{% if messages[0]['role'] == 'system' %}{% set system_message = messages[0]['content'] %}{% endif %}{% if system_message is defined %}{{ system_message }}{% endif %}{% for message in messages %}{% set content = message['content'] %}{% if message['role'] == 'user' %}{{ '<start_of_turn>user\n' + content + '<end_of_turn>\n<start_of_turn>model\n' }}{% elif message['role'] == 'assistant' %}{{ content + '<end_of_turn>\n' }}{% endif %}{% endfor %}"
+                tokenizer.pad_token = tokenizer.eos_token
+                tokenizer.pad_token_id = tokenizer.eos_token_id
+                tokenizer.padding_side = "right"
+
             eval_metrics = trainer.evaluate()
             metrics = eval_metrics.metrics
             predictions = eval_metrics.predictions
