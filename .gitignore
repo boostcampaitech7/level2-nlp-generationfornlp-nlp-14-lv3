@@ -5,3 +5,5 @@ __pycache__/
 experiments/
 *.bak
 .vscode/
+level2/
+.git/
