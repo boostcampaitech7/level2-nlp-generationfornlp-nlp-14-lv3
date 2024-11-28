@@ -7,11 +7,11 @@ import pandas as pd
 import torch
 import wandb
 from peft import AutoPeftModelForCausalLM, LoraConfig
-from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.trainer_utils import get_last_checkpoint
-from trl import DataCollatorForCompletionOnlyLM, SFTTrainer
-
+from trl import DataCollatorForCompletionOnlyLM
+from src._path import *
+from src.retriever.retrieval.sparse_retrieval import SparseRetrieval
 from src.customTrainer import CustomTrainer
 from src.utils import (
     check_git_status,
@@ -77,7 +77,40 @@ def tokenize(element):
         "input_ids": outputs["input_ids"],
         "attention_mask": outputs["attention_mask"],
     }
-
+def rag_system(df):
+    retriever = SparseRetrieval(
+        tokenize_fn=tokenizer.tokenize,
+        data_path=DATA_PATH,
+        context_path=os.path.join(DATA_PATH, "filtered_wikipedia.json"),
+        mode="bm25",
+        max_feature=100000,
+        ngram_range=(1, 2),
+        k1=1.1,
+        b=0.5,
+    )
+    if 'answer' in df.columns:
+        rag_df = retriever.retrieve(df, topk=2)
+    else:
+        records = []
+        for _, row in df.iterrows():
+            problems = literal_eval(row['problems'])
+            record = {
+                'id': row['id'],
+                'paragraph': row['paragraph'],
+                'question': problems['question'],
+                'choices': problems['choices'],
+                'answer': problems.get('answer', None),
+                "question_plus": problems.get('question_plus', None),
+            }
+            # Include 'question_plus' if it exists
+            if 'question_plus' in problems:
+                record['question_plus'] = problems['question_plus']
+            records.append(record)
+                
+        # Convert to DataFrame
+        df = pd.DataFrame(records)
+        rag_df = retriever.retrieve(df, topk=2)
+    return rag_df
 
 def formatting_prompts_func(example):
     output_texts = []

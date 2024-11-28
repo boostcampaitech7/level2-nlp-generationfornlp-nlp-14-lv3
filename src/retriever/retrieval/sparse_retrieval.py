@@ -1,6 +1,6 @@
 import json
 import os
-from typing import List, NoReturn, Optional, Tuple, Union
+from typing import List, NoReturn, Optional, Tuple, Union 
 import numpy as np
 import pandas as pd
 from datasets import Dataset
@@ -143,7 +143,7 @@ class SparseRetrieval:
 
     # 유사도 검색을 통한 비슷한 문서 검색
     def retrieve(
-        self, query_or_dataset: Union[str, Dataset], topk: Optional[int] = 1 # Union은 주로 여러개의 typing 형이 가능할 때 주로 가용. Optinal은 1값이나 int형 값을 가질 수 있다는 의미.
+        self, query_or_dataset: Union[str, pd.DataFrame,Dataset], topk: Optional[int] = 1 # Union은 주로 여러개의 typing 형이 가능할 때 주로 가용. Optinal은 1값이나 int형 값을 가질 수 있다는 의미.
     ) -> Union[Tuple[List, List], pd.DataFrame]: # 이 retrive의 결과로 튜플 형식의 (list, list)를 반환하거나 데이터프레임을 반환.
 
         """
@@ -179,38 +179,51 @@ class SparseRetrieval:
 
             return (doc_scores, [self.original_docs[doc_indices[i]] for i in range(topk)])
         # query or dataset이 dataset이 아닐경우 -> 이는 쿼리가 한개가 아니라 여러개라는 의미.
-        elif isinstance(query_or_dataset, Dataset):
-
-            # Retrieve한 Passage를 pd.DataFrame으로 반환합니다.
+        elif isinstance(query_or_dataset, (Dataset, pd.DataFrame)):
             total = []
-            # 위에서 선언한 contextmanager 들고와서 걸리는 시간 Check!
-            with timer("query exhaustive search"): # 
-                doc_scores, doc_indices = self.get_relevant_doc_bulk(
-                    query_or_dataset["question"], k=topk
-                )
-            # 쿼리와 ID와 내용 저장.
-            for idx, example in enumerate(
-                tqdm(query_or_dataset, desc="Sparse retrieval: ")
-            ):
+            
+            # DataFrame과 Dataset 모두 사용할 수 있도록 questions 리스트 생성
+            if isinstance(query_or_dataset, Dataset):
+                questions = query_or_dataset["question"]
+            else:  # DataFrame인 경우
+                questions = query_or_dataset["question"].tolist()
+
+            with timer("query exhaustive search"):
+                doc_scores, doc_indices = self.get_relevant_doc_bulk(questions, k=topk)
+
+            # DataFrame인 경우 iterrows() 사용
+            if isinstance(query_or_dataset, pd.DataFrame):
+                iterator = query_or_dataset.iterrows()
+            else:
+                iterator = enumerate(query_or_dataset)
+
+            for idx, example in tqdm(iterator, desc="Sparse retrieval: "):
+                if isinstance(query_or_dataset, Dataset):
+                    current_example = example
+                else:  # DataFrame인 경우
+                    current_example = example  # example은 이미 Series 객체임
+
                 tmp = {
-                    # Query와 해당 id를 반환합니다.
-                    "question": example["question"],
-                    "id": example["id"],
-                    # Retrieve한 Passage의 id, context를 반환합니다.
-                    "retrieval_context": 
-                        [self.original_docs[pid] for pid in doc_indices[idx]] # 현재 쿼리에 대한 가장 유사도가 높은 k개의 content들을 합침.
-                    ,
+                    "id": current_example["id"],
+                    "paragraph": current_example["paragraph"],
+                    "question": current_example["question"],
+                    "choices": current_example["choices"],
+                    "answer": current_example['answer'],
+                    "retrieval_context": [self.original_docs[pid] for pid in doc_indices[idx]]
                 }
-                if "context" in example.keys() and "answers" in example.keys():
-                    # validation 데이터를 사용하면 ground_truth context와 answer도 반환합니다.
-                    # 검증 데이터에는 아래와 같이 분리되어 잇음.
-                    tmp["original_context"] = example["context"]
-                    tmp["answers"] = example["answers"]
+
+                # question_plus 필드 처리
+                if isinstance(query_or_dataset, Dataset):
+                    if 'question_plus' in current_example and current_example['question_plus']:
+                        tmp["question_plus"] = current_example["question_plus"]
+                else:  # DataFrame인 경우
+                    if 'question_plus' in current_example and not pd.isna(current_example['question_plus']):
+                        tmp["question_plus"] = current_example["question_plus"]
+
                 total.append(tmp)
 
-            cqas = pd.DataFrame(total) # contex, question, answer, 
+            cqas = pd.DataFrame(total)
             return cqas
-
     def get_relevant_doc(self, query: str, k: Optional[int] = 1) -> Tuple[List, List]:
 
         """
