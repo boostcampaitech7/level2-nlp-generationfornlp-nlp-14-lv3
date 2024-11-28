@@ -211,29 +211,31 @@ def check_no_error(
     return max_seq_length
 
 
-PROMPT_NO_QUESTION_PLUS = """지문:
+PROMPT_NO_QUESTION_PLUS = """Paragraph:
 {paragraph}
 
-질문:
+Question:
 {question}
 
-선택지:
+Choices:
 {choices}
 
-1, 2, 3, 4, 5 중에 하나를 정답으로 고르세요.
-정답:"""
+Choice one in 5 choices.
+This is very important to my career.
+Answer:"""
 
-PROMPT_QUESTION_PLUS = """지문:
+PROMPT_QUESTION_PLUS = """Paragraph:
 {paragraph}
 
-질문:
+Question:
 {question}
 
-<보기>:
+More info:
 {question_plus}
 
-선택지:
+Choices:
 {choices}
 
-1, 2, 3, 4, 5 중에 하나를 정답으로 고르세요.
-정답:"""
+Choice one in 5 choices.
+This is very important to my career.
+Answer:"""
