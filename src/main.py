@@ -114,66 +114,66 @@ def run_generation():
         splits = [(np.arange(len(flatten_datasets)), np.array([]))]
 
     for fold, (train_idx, eval_idx) in enumerate(splits):
-        logger.info(f"Starting Fold {fold + 1}/{n_splits}")
-        kfold_dir = os.path.join(experiment_dir, f"fold_{fold + 1}")
-        os.makedirs(kfold_dir, exist_ok=True)
-
-        # Split datasets
-        train_flatten_datasets = flatten_datasets.select(train_idx)
-        if eval_idx.size > 0:
-            eval_flatten_datasets = flatten_datasets.select(eval_idx)
-        else:
-            # If no eval indices, create a validation split
-            split = train_flatten_datasets.train_test_split(
-                test_size=data_args.test_size, seed=sft_args.seed
-            )
-            train_flatten_datasets = split["train"]
-            eval_flatten_datasets = split["test"]
-
-        # Preprocess and tokenize datasets
-        def preprocess_and_tokenize(dataset):
-            processed_dataset = get_processed_dataset(dataset)
-            return processed_dataset.map(
-                tokenize,
-                batched=True,
-                num_proc=4,
-                load_from_cache_file=True,
-                desc="Tokenizing",
-            )
-
-        train_tokenized_dataset = preprocess_and_tokenize(train_flatten_datasets)
-        eval_tokenized_dataset = preprocess_and_tokenize(eval_flatten_datasets)
-
-        # Prepare data collator and trainer
-        response_template = "<start_of_turn>model"
-        data_collator = DataCollatorForCompletionOnlyLM(
-            response_template=response_template,
-            tokenizer=tokenizer,
-        )
-
-        peft_config = LoraConfig(
-            r=model_args.lora_r,
-            lora_alpha=model_args.lora_alpha,
-            lora_dropout=model_args.lora_dropout,
-            target_modules=["q_proj", "k_proj"],
-            bias="none",
-            task_type="CAUSAL_LM",
-        )
-
-        trainer = CustomTrainer(
-            model=model,
-            args=sft_args,
-            train_dataset=train_tokenized_dataset if sft_args.do_train else None,
-            eval_dataset=eval_tokenized_dataset if sft_args.do_eval else None,
-            data_collator=data_collator,
-            tokenizer=tokenizer,
-            compute_metrics=compute_metrics,
-            preprocess_logits_for_metrics=preprocess_logits_for_metrics,
-            peft_config=peft_config,
-        )
-
         # Training
         if sft_args.do_train:
+            logger.info(f"Starting Fold {fold + 1}/{n_splits}")
+            kfold_dir = os.path.join(experiment_dir, f"fold_{fold + 1}")
+            os.makedirs(kfold_dir, exist_ok=True)
+
+            # Split datasets
+            train_flatten_datasets = flatten_datasets.select(train_idx)
+            if eval_idx.size > 0:
+                eval_flatten_datasets = flatten_datasets.select(eval_idx)
+            else:
+                # If no eval indices, create a validation split
+                split = train_flatten_datasets.train_test_split(
+                    test_size=data_args.test_size, seed=sft_args.seed
+                )
+                train_flatten_datasets = split["train"]
+                eval_flatten_datasets = split["test"]
+
+            # Preprocess and tokenize datasets
+            def preprocess_and_tokenize(dataset):
+                processed_dataset = get_processed_dataset(dataset)
+                return processed_dataset.map(
+                    tokenize,
+                    batched=True,
+                    num_proc=4,
+                    load_from_cache_file=True,
+                    desc="Tokenizing",
+                )
+
+            train_tokenized_dataset = preprocess_and_tokenize(train_flatten_datasets)
+            eval_tokenized_dataset = preprocess_and_tokenize(eval_flatten_datasets)
+
+            # Prepare data collator and trainer
+            response_template = "<start_of_turn>model"
+            data_collator = DataCollatorForCompletionOnlyLM(
+                response_template=response_template,
+                tokenizer=tokenizer,
+            )
+
+            peft_config = LoraConfig(
+                r=model_args.lora_r,
+                lora_alpha=model_args.lora_alpha,
+                lora_dropout=model_args.lora_dropout,
+                target_modules=["q_proj", "k_proj"],
+                bias="none",
+                task_type="CAUSAL_LM",
+            )
+
+            trainer = CustomTrainer(
+                model=model,
+                args=sft_args,
+                train_dataset=train_tokenized_dataset if sft_args.do_train else None,
+                eval_dataset=eval_tokenized_dataset if sft_args.do_eval else None,
+                data_collator=data_collator,
+                tokenizer=tokenizer,
+                compute_metrics=compute_metrics,
+                preprocess_logits_for_metrics=preprocess_logits_for_metrics,
+                peft_config=peft_config,
+            )
+
             wandb.init(project="GEN", name=sft_args.run_name, dir=sft_args.output_dir)
             logger.info("Training/evaluation parameters %s", sft_args)
 
