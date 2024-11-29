@@ -203,13 +203,17 @@ class SparseRetrieval:
                 else:  # DataFrame인 경우
                     current_example = example  # example은 이미 Series 객체임
 
+                len_paragraph = len(current_example["paragraph"])
+                min_paragraph = 1300
+                max_passage_len = 40
+
                 tmp = {
                     "id": current_example["id"],
                     "paragraph": current_example["paragraph"],
                     "question": current_example["question"],
                     "choices": current_example["choices"],
                     "answer": current_example['answer'],
-                    "retrieval_context": [self.original_docs[pid] for pid in doc_indices[idx]]
+                    "retrieval_context": [self.original_docs[pid][:max_passage_len] if len_paragraph < min_paragraph else "" for pid in doc_indices[idx]]
                 }
 
                 # question_plus 필드 처리

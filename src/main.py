@@ -11,7 +11,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.trainer_utils import get_last_checkpoint
 from trl import DataCollatorForCompletionOnlyLM
 from src._path import *
-from src.retriever.retrieval.sparse_retrieval import SparseRetrieval
 from src.customTrainer import CustomTrainer
 from src.utils import (
     check_git_status,
@@ -22,7 +21,9 @@ from src.utils import (
     get_processed_dataset,
     save_args,
     set_seed,
+    empty_memory,
 )
+# os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:400,garbage_collection_threshold:0.6'
 
 DEVICE = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 commit_id = check_git_status()
@@ -53,7 +54,7 @@ tokenizer.pad_token_id = tokenizer.eos_token_id
 tokenizer.padding_side = "right"
 
 datasets = pd.read_csv(data_args.dataset_name)
-flatten_datasets = get_flatten_dataset(datasets).train_test_split(
+flatten_datasets = get_flatten_dataset(datasets, tokenizer=tokenizer).train_test_split(
     test_size=data_args.test_size, seed=sft_args.seed
 )
 train_flatten_datasets, eval_flatten_datasets = (
@@ -68,49 +69,16 @@ train_processed_dataset, eval_processed_dataset = get_processed_dataset(
 def tokenize(element):
     outputs = tokenizer(
         formatting_prompts_func(element),
-        truncation=False,
+        truncation=True,
+        max_length = 3074,
         padding=False,
-        return_overflowing_tokens=False,
+        return_overflowing_tokens=True,
         return_length=False,
     )
     return {
         "input_ids": outputs["input_ids"],
         "attention_mask": outputs["attention_mask"],
     }
-def rag_system(df):
-    retriever = SparseRetrieval(
-        tokenize_fn=tokenizer.tokenize,
-        data_path=DATA_PATH,
-        context_path=os.path.join(DATA_PATH, "filtered_wikipedia.json"),
-        mode="bm25",
-        max_feature=100000,
-        ngram_range=(1, 2),
-        k1=1.1,
-        b=0.5,
-    )
-    if 'answer' in df.columns:
-        rag_df = retriever.retrieve(df, topk=2)
-    else:
-        records = []
-        for _, row in df.iterrows():
-            problems = literal_eval(row['problems'])
-            record = {
-                'id': row['id'],
-                'paragraph': row['paragraph'],
-                'question': problems['question'],
-                'choices': problems['choices'],
-                'answer': problems.get('answer', None),
-                "question_plus": problems.get('question_plus', None),
-            }
-            # Include 'question_plus' if it exists
-            if 'question_plus' in problems:
-                record['question_plus'] = problems['question_plus']
-            records.append(record)
-                
-        # Convert to DataFrame
-        df = pd.DataFrame(records)
-        rag_df = retriever.retrieve(df, topk=2)
-    return rag_df
 
 def formatting_prompts_func(example):
     output_texts = []
@@ -214,7 +182,7 @@ if sft_args.do_train:
     checkpoint = None
     if os.path.isdir(model_args.model_name_or_path):
         checkpoint = model_args.model_name_or_path
-
+    empty_memory()
     train_result = trainer.train(resume_from_checkpoint=checkpoint)
     trainer.save_model()
 
