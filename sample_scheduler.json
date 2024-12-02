@@ -1,0 +1,10 @@
+[
+    {
+        "run_name": "train_v4, k-fold 5",
+        "model_name_or_path": "LGAI-EXAONE/EXAONE-3.0-7.8B-Instruct",
+        "tokenizer_name": "LGAI-EXAONE/EXAONE-3.0-7.8B-Instruct",
+        "dataset_name": "data/train_v4.csv",
+        "learning_rate": 2e-05,
+        "do_kfold": true
+    }
+]
