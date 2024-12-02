@@ -1,0 +1,10 @@
+data/
+.DS_Store
+args*.json
+scheduler.json
+__pycache__/
+experiments/
+*.bak
+.vscode/
+level2/
+*.csv
