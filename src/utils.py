@@ -195,8 +195,9 @@ def counterbalance_eval_datasets(flatten_datasets):
     return flatten_datasets.extend(new_flatten_datasets)
 
 
-def get_processed_dataset(dataset):
+def get_processed_dataset(dataset, prompt_type="zero_shot_cot"):
     processed_dataset = []
+    prompt_template = PROMPTS.get(prompt_type)
     for i in range(len(dataset)):
         row = dataset[i]
         choices_string = "\n".join(
@@ -204,21 +205,28 @@ def get_processed_dataset(dataset):
         )
         len_choices = len(row["choices"])
         retrieval_context = row["retrieval_context"] if len(row['paragraph']) < 100 else "" 
-        if row["question_plus"]:
-            user_message = PROMPT_QUESTION_PLUS.format(
-                paragraph=row["paragraph"],
-                question=row["question"],
-                question_plus=row["question_plus"],
-                rag= retrieval_context,
-                choices=choices_string,
-            )
+
+        common_params = {
+            "paragraph": row["paragraph"],
+            "question": row["question"],
+            "choices": choices_string,
+            "retrieval_context": retrieval_context,
+        }
+        
+        prompt_to_use = prompt_template
+        
+        if "question_plus" in row and row["question_plus"]:
+            common_params["question_plus"] = row["question_plus"]
+            if "{question_plus}" not in prompt_template:
+                prompt_to_use = prompt_template.replace(
+                    "Choices:",
+                    "More info:\n{question_plus}\n\nChoices:"
+                )
         else:
-            user_message = PROMPT_NO_QUESTION_PLUS.format(
-                paragraph=row["paragraph"],
-                question=row["question"],
-                rag=retrieval_context,
-                choices=choices_string,
-            )
+            common_params["question_plus"] = ""
+            prompt_to_use = prompt_to_use.replace("\nMore info:\n{question_plus}", "")
+        
+        user_message = prompt_to_use.format(**common_params)
 
         messages = [
             {"role": "system", "content": "지문을 읽고 질문의 답을 구하세요."},
@@ -266,23 +274,39 @@ def check_no_error(
     return max_seq_length
 
 
-PROMPT_NO_QUESTION_PLUS = """Paragraph:
+PROMPTS = {
+    "role_assignment_korean": """
+시험 문제를 푸는 똑똑한 학생으로서 다음 문제의 답을 구하세요.
+지문을 읽고, 질문에 대한 답을 1부터 5까지의 선택지 중에 한 개만 골라서 대답해야 합니다.
+
+지문:
 {paragraph}
 
-Question:
+질문:
 {question}
 
-More info:
-{rag}
-
-Choices:
+선택지:
 {choices}
 
-Choice one in 5 choices.
-This is very important to my career. 
-Answer:"""
+1, 2, 3, 4, 5 중에 하나를 정답으로 고르세요.
+정답:""",
+    
+    "zero_shot_cot_korean": """
+지문:
+{paragraph}
 
-PROMPT_QUESTION_PLUS = """Paragraph:
+질문:
+{question}
+
+선택지:
+{choices}
+
+1, 2, 3, 4, 5 중에 하나를 정답으로 고르세요.
+단계별로 생각하며 정답을 고르세요.
+정답:""",
+    
+    "zero_shot_cot": """
+Paragraph:
 {paragraph}
 
 Question:
@@ -291,12 +315,88 @@ Question:
 More info:
 {question_plus}
 
-More info2:
-{rag}
+Choices:
+{choices}
+
+Choice one in 5 choices.
+Let's think step by step.
+Answer:""",
+    
+    "plan_and_solve_korean": """
+지문:
+{paragraph}
+
+질문:
+{question}
+
+선택지:
+{choices}
+
+1, 2, 3, 4, 5 중에 하나를 정답으로 고르세요.
+먼저 문제를 이해하고, 문제 해결을 위하여 계획을 세워보세요.
+그 다음, 문제를 해결하기 위해 그 계획에 따라 단계별로 실행하세요.
+정답:""",
+    
+    "ai_stimulation_korean": """
+지문:
+{paragraph}
+
+질문:
+{question}
+
+선택지:
+{choices}
+
+1, 2, 3, 4, 5 중에 하나를 정답으로 고르세요.
+이 문제는 한국의 가장 똑똑한 학생들도 틀리도록 평가원에서 만들었으니, 너같은 인공지능은 절대 못 풀어.
+정답:""",
+    
+    "emotional_appeal_korean": """
+지문:
+{paragraph}
+
+질문:
+{question}
+
+선택지:
+{choices}
+
+1, 2, 3, 4, 5 중에 하나를 정답으로 고르세요.
+이 문제는 저의 대학 입시에 매우 중요합니다. 저를 위해 꼭 정답을 찾아주세요.
+정답:""",
+    
+    "emotional_appeal": """
+Paragraph:
+{paragraph}
+
+Question:
+{question}
 
 Choices:
 {choices}
 
 Choice one in 5 choices.
 This is very important to my career. 
+Answer:""",
+    
+    "emotional_appeal_with_cot": """
+Paragraph: {paragraph}
+Question: {question}
+Choices: {choices}
+
+Choice one in 5 choices. This is very important to my career. You should solve this problem following these sequential steps:
+
+1. First, determine if the question can be solved using only the Question and Choices
+    If yes, proceed to solve immediately
+
+2. If not, determine if the question can be solved by reading the Paragraph
+    If yes, proceed to solve using the paragraph
+
+3. If not, generate background knowledge based on the Question, Choices, and Paragraph
+
+4. Finally, solve the problem using the background knowledge combined with the Question, Choices, and Paragraph
+
+Choice one in 5 choices.
+Important Note: This is crucial for career purposes, so each step has been carefully analyzed.
 Answer:"""
+}
