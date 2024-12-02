@@ -6,7 +6,6 @@ import pandas as pd
 from datasets import Dataset
 from tqdm.auto import tqdm
 from scipy.sparse import save_npz, load_npz, vstack
-from src.utils import timer
 from src.retriever.embedding.sparse_embedding import SparseEmbedding
 from src.retriever.score.ranking import check_original_in_context, calculate_reverse_rank_score, calculate_linear_score
 import re
@@ -188,8 +187,8 @@ class SparseRetrieval:
             else:  # DataFrame인 경우
                 questions = query_or_dataset["question"].tolist()
 
-            with timer("query exhaustive search"):
-                doc_scores, doc_indices = self.get_relevant_doc_bulk(questions, k=topk)
+            
+            doc_scores, doc_indices = self.get_relevant_doc_bulk(questions, k=topk)
 
             # DataFrame인 경우 iterrows() 사용
             if isinstance(query_or_dataset, pd.DataFrame):
@@ -240,17 +239,16 @@ class SparseRetrieval:
             vocab 에 없는 이상한 단어로 query 하는 경우 assertion 발생 (예) 뙣뙇?
         """
         # 위에서 선언한 contextmanager 들고와서 걸리는 시간 Check!
-        with timer("transform"):
-            query = self.clean_text(query)
-            query_vec = self.sparse_embed.transform(query) # 쿼리문을 벡터화
+        
+        query = self.clean_text(query)
+        query_vec = self.sparse_embed.transform(query) # 쿼리문을 벡터화
         # 쿼리문이 정상적으로 바뀌였는지 확인
         assert (
             np.sum(query_vec) != 0
         ), "오류가 발생했습니다. 이 오류는 보통 query에 vectorizer의 vocab에 없는 단어만 존재하는 경우 발생합니다."
         
-        # 쿼리 벡터와 
-        with timer("query ex search"):                                          # (위키)
-            result = query_vec @ self.p_embedding.T # (1, 50,000) x (50,000 x 문서 벡터 수) -> (1, 문서 수) -> 가장 유사한 문서를 찾을 수 있다..?
+        # 쿼리 벡터와 # (위키)                    
+        result = query_vec @ self.p_embedding.T # (1, 50,000) x (50,000 x 문서 벡터 수) -> (1, 문서 수) 
         if not isinstance(result, np.ndarray):
             result = result.toarray()
 

@@ -6,16 +6,7 @@ import sys
 from ast import literal_eval
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional, Tuple
-from contextlib import contextmanager
-import time
-import gc
-@contextmanager
-def timer(name):
-    t0 = time.time()
-    yield
-    print(f"[{name}] done in {time.time() - t0:.3f} s")
 from src.retriever.retrieval.sparse_retrieval import SparseRetrieval
-from transformers import AutoTokenizer
 import git
 import numpy as np
 import pandas as pd
@@ -32,10 +23,10 @@ logger = logging.getLogger(__name__)
 
 def check_git_status():
     repo = git.Repo(search_parent_directories=True)
-    # if repo.is_dirty():
-    #     raise Exception(
-    #         "Uncommitted changes in the repository. Commit or stash changes before running the experiment."
-    #     )
+    if repo.is_dirty():
+        raise Exception(
+            "Uncommitted changes in the repository. Commit or stash changes before running the experiment."
+        )
     return repo.head.commit.hexsha
 
 
@@ -398,5 +389,24 @@ Choice one in 5 choices. This is very important to my career. You should solve t
 
 Choice one in 5 choices.
 Important Note: This is crucial for career purposes, so each step has been carefully analyzed.
+Answer:""",
+    "emotional_appeal_with_rag":"""
+    Paragraph:
+{paragraph}
+
+Question:
+{question}
+
+More info:
+{question_plus}
+
+More info2:
+{rag}
+
+Choices:
+{choices}
+
+Choice one in 5 choices.
+This is very important to my career. 
 Answer:"""
 }
